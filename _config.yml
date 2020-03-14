@@ -7,6 +7,9 @@
 # https://learnxinyminutes.com/docs/yaml/
 
 title: stathistics
+author:
+  name: Stathi Fotiadis
+  twitter: stathius_
 description: Machine learning and physics
 github_username: stathius
 # you can comment the below line out if your repo name is not different than your baseurl
