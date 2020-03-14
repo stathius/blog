@@ -44,7 +44,7 @@ minima:
     linkedin: stathifotiadis
 
 # Set this to true to get LaTeX math equation support
-use_math: True
+use_math: true
 
 # Set this to true to display the summary of your blog post under your title on the Home page.
 show_description: true
@@ -56,7 +56,7 @@ show_image: false
 show_tags: true
 
 # Add your Google Analytics ID here if you have one and want to use it
-google_analytics:
+google_analytics: UA-61546452-1
 
 exclude:
   - docker-compose.yml
