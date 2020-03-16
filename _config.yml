@@ -98,3 +98,5 @@ kramdown:
   auto_ids: true
   hard_wrap: false
   syntax_highlighter: rouge
+
+permalink: /:year/:month/:day/:title:output_ext
