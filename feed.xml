@@ -1,4 +1,104 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.0.0">Jekyll</generator><link href="https://stathius.github.io/blog/feed.xml" rel="self" type="application/atom+xml" /><link href="https://stathius.github.io/blog/" rel="alternate" type="text/html" /><updated>2020-03-16T06:41:52-05:00</updated><id>https://stathius.github.io/blog/feed.xml</id><title type="html">stathistics</title><subtitle>Machine learning and physics</subtitle><author><name>Stathi Fotiadis</name></author><entry><title type="html">Fastpages Notebook Blog Post</title><link href="https://stathius.github.io/blog/jupyter/2020/02/20/test.html" rel="alternate" type="text/html" title="Fastpages Notebook Blog Post" /><published>2020-02-20T00:00:00-06:00</published><updated>2020-02-20T00:00:00-06:00</updated><id>https://stathius.github.io/blog/jupyter/2020/02/20/test</id><content type="html" xml:base="https://stathius.github.io/blog/jupyter/2020/02/20/test.html">&lt;!--
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.0.0">Jekyll</generator><link href="https://stathius.github.io/blog/feed.xml" rel="self" type="application/atom+xml" /><link href="https://stathius.github.io/blog/" rel="alternate" type="text/html" /><updated>2020-03-16T17:23:43-05:00</updated><id>https://stathius.github.io/blog/feed.xml</id><title type="html">stathistics</title><subtitle>Machine learning and physics</subtitle><author><name>Stathi Fotiadis</name></author><entry><title type="html">Spatiotemporal data for pytorch in HDF5</title><link href="https://stathius.github.io/blog/pytorch/spatiotemporal/speed/comparison/2020/03/13/loading-spatiotemporal-data.html" rel="alternate" type="text/html" title="Spatiotemporal data for pytorch in HDF5" /><published>2020-03-13T00:00:00-05:00</published><updated>2020-03-13T00:00:00-05:00</updated><id>https://stathius.github.io/blog/pytorch/spatiotemporal/speed/comparison/2020/03/13/loading-spatiotemporal-data</id><content type="html" xml:base="https://stathius.github.io/blog/pytorch/spatiotemporal/speed/comparison/2020/03/13/loading-spatiotemporal-data.html">&lt;p&gt;Spatiotemporal data consist of 2 or 3 spatial dimensions and there is also the dimension of time. They come in all sorts of flavors like video, traffic, temperature etc.  Personally I am interested in predicting physical dynamical systems.  In my last project, I was working with simulations of wave propagation. The data came in JPEG format, where each simulation would be a series of files. You can see an example of a data sequence below, and if you want to know a bit more about that work check this &lt;a href=&quot;https://arxiv.org/abs/2002.08981&quot;&gt;paper&lt;/a&gt; and &lt;a href=&quot;https://github.com/stathius/wave_propagation&quot;&gt;code&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/wavedata.jpg&quot; alt=&quot;&quot; title=&quot;In spatiotemporal data one dimension is always time. In this example there are 2 spatial dimensions.&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;While I was using the data “as is” at the time, I started wondering whether JPEG files were the right format of storage. This was triggered because I noticed that during training, loading  data was the main bottleneck. I am using &lt;code class=&quot;highlighter-rouge&quot;&gt;pytorch&lt;/code&gt; and the provided &lt;code class=&quot;highlighter-rouge&quot;&gt;DataLoader&lt;/code&gt; class does an extremely good job of pre-fetching data but increasing the number of workers didn’t seem to solve the problem, it even made it worse. There are also other concerns. The artefacts that JPEG introduces, while barely visible to the human eye, can also be quite important for your network. Another issue is normalization. Pixel values are in the 0-255 range. This means that the normalization needs to be known before hand but this is not always possible and might need to clipping or loss of “dynamic range”.&lt;/p&gt;
+
+&lt;h2 id=&quot;data-formats&quot;&gt;Data formats&lt;/h2&gt;
+
+&lt;p&gt;In the pre-&lt;code class=&quot;highlighter-rouge&quot;&gt;dataloader&lt;/code&gt; era the right format for data storage in deep learning was not obvious. One natural choice is storing image files in JPEG files. JPEG offers a significant compression over raw image data. This is also applicable to short videos, which after all are just sequences of images. The downside is that loading image files one by one takes long if you load many of them at once. Python has various libraries that can deal with loading images like &lt;code class=&quot;highlighter-rouge&quot;&gt;pillow&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Another popular way of storing images and videos is Hierarchical Data Format (HDF5). It a nutshell, HDF5 is good for big datasets with hierarchical structure. It only offers generic compression like GZIP and LZF. In &lt;code class=&quot;highlighter-rouge&quot;&gt;python&lt;/code&gt; the &lt;a href=&quot;https://www.h5py.org/&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;h5py&lt;/code&gt;&lt;/a&gt; library offers support for HDF5.&lt;/p&gt;
+
+&lt;h2 id=&quot;speed-comparisons&quot;&gt;Speed comparisons&lt;/h2&gt;
+
+&lt;p&gt;Saving snapshots in JPEG is straighforward but HDF5 has its quirks. There are a couple of variable that play a big role on the read/write speed of the dataset: chunking, compression, filesize.&lt;/p&gt;
+
+&lt;p&gt;All datasets are comprised of 3000 datapoints, where each datapoint is a sequence of $100$ frames and each frame is a $184 \times 184$ array. A batch contains 10 randomly chosen datapoints ($10\times 100\times 184\times 184$). To compare the different data formats, I fetch 10 batches, so 100 datapoints in total, and report the time it takes &lt;em&gt;per datapoint&lt;/em&gt;. I also compare the time for 1,2,4 and 8 workers. For reference, all tests were conducted on a system equipped with a mid-range quad-core &lt;code class=&quot;highlighter-rouge&quot;&gt;i-7&lt;/code&gt; and a decent SSD.&lt;/p&gt;
+
+&lt;h2 id=&quot;results&quot;&gt;Results&lt;/h2&gt;
+
+&lt;h3 id=&quot;correct-chunking-in-hdf-very-important&quot;&gt;Correct chunking in HDF very important&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://support.hdfgroup.org/HDF5/doc/Advanced/Chunking/index.html&quot;&gt;Chunking&lt;/a&gt; is a very important concept in HDF. I used two different methods, the first is auto-chunking. With this setting it takes 1.02 seconds with 4 workers to fetch a datapoint, which is slow. I set the chunk equal to the size of a datapoint ($100\times 184\times 184$ ).&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;hdf5_store = h5py.File(filename, &quot;w&quot;)
+images = hdf5_store.create_dataset('images', (num_datapoints,100,184,184), chunks=(1, 100, 184, 184), compression='gzip')
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This made it dramatically faster and only took 0.013 seconds to fetch a datapoint, a 78x speed-up! If you have structured data and you know how much you’ll be fetching each time make sure to use that knowledge to your benefit.&lt;/p&gt;
+
+&lt;h3 id=&quot;hdf5-with-correct-chunking-is-faster-than-jpeg&quot;&gt;HDF5 with correct chunking is faster than JPEG&lt;/h3&gt;
+
+&lt;p&gt;JPEG might be more straightforward to use than HDF5 but it’s also slower. It takes 0.085 second on average for a JPEG-based dataloader to bring a datapoint. On the other hand, HDF5 only needs 0.013 seconds, more than 6.5x faster.&lt;/p&gt;
+
+&lt;h3 id=&quot;compression&quot;&gt;Compression&lt;/h3&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style=&quot;text-align: left&quot;&gt; &lt;/th&gt;
+      &lt;th style=&quot;text-align: right&quot;&gt;1&lt;/th&gt;
+      &lt;th style=&quot;text-align: right&quot;&gt;2&lt;/th&gt;
+      &lt;th style=&quot;text-align: right&quot;&gt;4&lt;/th&gt;
+      &lt;th style=&quot;text-align: right&quot;&gt;8&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;JPEG&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.173&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.123&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.085&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.079&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Auto Chunking - LZF&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;2.449&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;1.413&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;1.02&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.812&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Manual Chunks - LZF&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.041&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.022&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.013&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.013&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Manual Chunks - GZIP&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.067&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.035&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.022&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.019&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Manual Chunks - LZF - Small Dataset&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.051&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.027&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.016&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.015&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style=&quot;text-align: left&quot;&gt;Auto Chunking - LZF - Small Dataset&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;1.688&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.977&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.695&lt;/td&gt;
+      &lt;td style=&quot;text-align: right&quot;&gt;0.517&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;increasing-number-of-workers-has-limitations&quot;&gt;Increasing number of workers has limitations&lt;/h3&gt;
+
+&lt;p&gt;Increasing the number of workers works well up to a certain extent. The speed-up is sublinear, using 4 instead of 1 worker is not 4x faster but rather 2.5-3x. Additionally, in most cases, using more than 4 workers does not provide any further gains.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;JPEG is a codec that has been built for natural images and works well for them.&lt;/p&gt;
+
+&lt;p&gt;Check &lt;a href=&quot;https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5&quot;&gt;this article&lt;/a&gt; for more&lt;/p&gt;</content><author><name>Stathi Fotiadis</name></author><summary type="html">Spatiotemporal data consist of 2 or 3 spatial dimensions and there is also the dimension of time. They come in all sorts of flavors like video, traffic, temperature etc. Personally I am interested in predicting physical dynamical systems. In my last project, I was working with simulations of wave propagation. The data came in JPEG format, where each simulation would be a series of files. You can see an example of a data sequence below, and if you want to know a bit more about that work check this paper and code.</summary></entry><entry><title type="html">Fastpages Notebook Blog Post</title><link href="https://stathius.github.io/blog/jupyter/2020/02/20/test.html" rel="alternate" type="text/html" title="Fastpages Notebook Blog Post" /><published>2020-02-20T00:00:00-06:00</published><updated>2020-02-20T00:00:00-06:00</updated><id>https://stathius.github.io/blog/jupyter/2020/02/20/test</id><content type="html" xml:base="https://stathius.github.io/blog/jupyter/2020/02/20/test.html">&lt;!--
 #################################################
 ### THIS FILE WAS AUTOGENERATED! DO NOT EDIT! ###
 #################################################
