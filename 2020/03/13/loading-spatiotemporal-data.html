@@ -130,7 +130,7 @@ window.onload = wrap_img;
        • <span class="read-time" title="Estimated read time">
     
     
-      4 min read
+      5 min read
     
 </span></p>
 
@@ -155,9 +155,15 @@ window.onload = wrap_img;
     </header>
 
   <div class="post-content e-content" itemprop="articleBody">
-    <p>Spatiotemporal data consist of 2 or 3 spatial dimensions and there is also the dimension of time. They come in all sorts of flavors like video, traffic, temperature etc.  Personally I am interested in predicting physical dynamical systems.  In my last project, I was working with simulations of wave propagation. The data came in JPEG format, where each simulation would be a series of files. You can see an example of a data sequence below, and if you want to know a bit more about that work check this <a href="https://arxiv.org/abs/2002.08981">paper</a> and <a href="https://github.com/stathius/wave_propagation">code</a>.</p>
+    <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>tl;dr
+JPEG offers good compression for images but reading spatiotemporal data 
+(image sequences) from disk can be slow. Images are also limited to 8bits per channel.  
+HDF5 is faster, offers higher bit-depth but saves less space and requires some tweaking.
+</code></pre></div></div>
 
-<p><img src="/blog/images/wavedata.jpg" alt="" title="In spatiotemporal data one dimension is always time. In this example there are 2 spatial dimensions." /></p>
+<p>Spatiotemporal data consist of 2 or 3 spatial dimensions and there is also the dimension of time. They come in all sorts of flavors like video, traffic, temperature etc.  Personally I am interested in predicting physical dynamical systems.  In my last project, I was working with simulations of wave propagation. The data came in JPEG format, where each simulation would be a series of files. You can see an example of a data sequence below, and if you want to know a bit more about that work check this <a href="https://arxiv.org/abs/2002.08981">paper</a> and <a href="https://github.com/stathius/wave_propagation">code</a>.</p>
+
+<p><img src="/blog/images/wavedata.jpg" alt="" title="An example of spatiotemporal data. One dimension is always time. Here, there are 2 spatial dimensions." /></p>
 
 <p>While I was using the data “as is” at the time, I started wondering whether JPEG files were the right format of storage. This was triggered because I noticed that during training, loading  data was the main bottleneck. I am using <code class="highlighter-rouge">pytorch</code> and the provided <code class="highlighter-rouge">DataLoader</code> class does an extremely good job of pre-fetching data but increasing the number of workers didn’t seem to solve the problem, it even made it worse. There are also other concerns. The artefacts that JPEG introduces, while barely visible to the human eye, can also be quite important for your network. Another issue is normalization. Pixel values are in the 0-255 range. This means that the normalization needs to be known before hand but this is not always possible and might need to clipping or loss of “dynamic range”.</p>
 
@@ -167,13 +173,73 @@ window.onload = wrap_img;
 
 <p>Another popular way of storing images and videos is Hierarchical Data Format (HDF5). It a nutshell, HDF5 is good for big datasets with hierarchical structure. It only offers generic compression like GZIP and LZF. In <code class="highlighter-rouge">python</code> the <a href="https://www.h5py.org/"><code class="highlighter-rouge">h5py</code></a> library offers support for HDF5.</p>
 
-<h2 id="speed-comparisons">Speed comparisons</h2>
+<h2 id="speed-comparison">Speed comparison</h2>
 
 <p>Saving snapshots in JPEG is straighforward but HDF5 has its quirks. There are a couple of variable that play a big role on the read/write speed of the dataset: chunking, compression, filesize.</p>
 
 <p>All datasets are comprised of 3000 datapoints, where each datapoint is a sequence of $100$ frames and each frame is a $184 \times 184$ array. A batch contains 10 randomly chosen datapoints ($10\times 100\times 184\times 184$). To compare the different data formats, I fetch 10 batches, so 100 datapoints in total, and report the time it takes <em>per datapoint</em>. I also compare the time for 1,2,4 and 8 workers. For reference, all tests were conducted on a system equipped with a mid-range quad-core <code class="highlighter-rouge">i-7</code> and a decent SSD.</p>
 
-<h2 id="results">Results</h2>
+<p>Here’s a summary of the results and following some analysis.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: left">Format</th>
+      <th style="text-align: left">Chunks</th>
+      <th style="text-align: left">Compression</th>
+      <th style="text-align: left">Size</th>
+      <th style="text-align: right">Time - 1 worker</th>
+      <th style="text-align: right">2 workers</th>
+      <th style="text-align: right">4 workers</th>
+      <th style="text-align: right">8 workers</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: left">JPEG</td>
+      <td style="text-align: left">-</td>
+      <td style="text-align: left">-</td>
+      <td style="text-align: left"><strong>2.4G</strong></td>
+      <td style="text-align: right">0.173</td>
+      <td style="text-align: right">0.123</td>
+      <td style="text-align: right">0.085</td>
+      <td style="text-align: right">0.079</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Auto</td>
+      <td style="text-align: left">LZF</td>
+      <td style="text-align: left">19G</td>
+      <td style="text-align: right">2.449</td>
+      <td style="text-align: right">1.413</td>
+      <td style="text-align: right">1.02</td>
+      <td style="text-align: right">0.812</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Manual</td>
+      <td style="text-align: left">LZF</td>
+      <td style="text-align: left">17G</td>
+      <td style="text-align: right">0.041</td>
+      <td style="text-align: right">0.022</td>
+      <td style="text-align: right"><strong>0.013</strong></td>
+      <td style="text-align: right"><strong>0.013</strong></td>
+    </tr>
+    <tr>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Manual</td>
+      <td style="text-align: left">GZIP</td>
+      <td style="text-align: left">12G</td>
+      <td style="text-align: right">0.067</td>
+      <td style="text-align: right">0.035</td>
+      <td style="text-align: right">0.022</td>
+      <td style="text-align: right">0.019</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- | HDF5     | Auto     | LZF           | 2.1G           |             1.688 |       0.977 |       0.695 |       0.517 | -->
+<!-- | HDF5     | Manual   | LZF           | 2.6G           |             0.051 |       0.027 |       0.016 |       0.015 | -->
 
 <h3 id="correct-chunking-in-hdf-very-important">Correct chunking in HDF very important</h3>
 
@@ -191,58 +257,65 @@ images = hdf5_store.create_dataset('images', (num_datapoints,100,184,184), chunk
 
 <h3 id="compression">Compression</h3>
 
+<p>HDF allows three types of compression: LZF, GZIP and SZIP. For GZIP you can adjust the compression strength from 1 to 9, where 1 is the least compression. JPEG also compresses images using the DCT encoding. JPEG is by far the best compression for this dataset, taking only 2.4GB. Probably because the dataset has a lot of constant intensity regions that JPEG is good with. HDF5 the  takes much more space, GZIP and correct chunking help a bit but only manage to reduce the size to 12G. In terms of speed HDF5 with LZF compression and manual chunking is the fastest. HDF5+GZIP is second fastest, so if disk space is a concern it’s worth considering.</p>
+
+<h3 id="hdf-file-size">HDF File size</h3>
+
+<p>I was also wondering if packing more datapoints in one file plays any role in the read speed of HDF5 files. The results in the table below. Apparently, if you do your chunking correct, bigger files are as fast as smaller ones, if not faster.</p>
+
 <table>
   <thead>
     <tr>
-      <th style="text-align: left"> </th>
-      <th style="text-align: right">1</th>
-      <th style="text-align: right">2</th>
-      <th style="text-align: right">4</th>
-      <th style="text-align: right">8</th>
+      <th style="text-align: left">Format</th>
+      <th style="text-align: left">Chunks</th>
+      <th style="text-align: left">Datapoint</th>
+      <th style="text-align: left">Size</th>
+      <th style="text-align: right">Time - 1 worker</th>
+      <th style="text-align: right">2 workers</th>
+      <th style="text-align: right">4 workers</th>
+      <th style="text-align: right">8 workers</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: left">JPEG</td>
-      <td style="text-align: right">0.173</td>
-      <td style="text-align: right">0.123</td>
-      <td style="text-align: right">0.085</td>
-      <td style="text-align: right">0.079</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">Auto Chunking - LZF</td>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Auto</td>
+      <td style="text-align: left">3000</td>
+      <td style="text-align: left">19G</td>
       <td style="text-align: right">2.449</td>
       <td style="text-align: right">1.413</td>
       <td style="text-align: right">1.02</td>
       <td style="text-align: right">0.812</td>
     </tr>
     <tr>
-      <td style="text-align: left">Manual Chunks - LZF</td>
-      <td style="text-align: right">0.041</td>
-      <td style="text-align: right">0.022</td>
-      <td style="text-align: right">0.013</td>
-      <td style="text-align: right">0.013</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">Manual Chunks - GZIP</td>
-      <td style="text-align: right">0.067</td>
-      <td style="text-align: right">0.035</td>
-      <td style="text-align: right">0.022</td>
-      <td style="text-align: right">0.019</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">Manual Chunks - LZF - Small Dataset</td>
-      <td style="text-align: right">0.051</td>
-      <td style="text-align: right">0.027</td>
-      <td style="text-align: right">0.016</td>
-      <td style="text-align: right">0.015</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">Auto Chunking - LZF - Small Dataset</td>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Auto</td>
+      <td style="text-align: left">500</td>
+      <td style="text-align: left">2.1G</td>
       <td style="text-align: right">1.688</td>
       <td style="text-align: right">0.977</td>
       <td style="text-align: right">0.695</td>
       <td style="text-align: right">0.517</td>
+    </tr>
+    <tr>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Manual</td>
+      <td style="text-align: left">3000</td>
+      <td style="text-align: left">17G</td>
+      <td style="text-align: right">0.041</td>
+      <td style="text-align: right">0.022</td>
+      <td style="text-align: right">0.013</td>
+      <td style="text-align: right"><strong>0.013</strong></td>
+    </tr>
+    <tr>
+      <td style="text-align: left">HDF5</td>
+      <td style="text-align: left">Manual</td>
+      <td style="text-align: left">500</td>
+      <td style="text-align: left">2.6G</td>
+      <td style="text-align: right">0.051</td>
+      <td style="text-align: right">0.027</td>
+      <td style="text-align: right">0.016</td>
+      <td style="text-align: right">0.015</td>
     </tr>
   </tbody>
 </table>
@@ -251,11 +324,23 @@ images = hdf5_store.create_dataset('images', (num_datapoints,100,184,184), chunk
 
 <p>Increasing the number of workers works well up to a certain extent. The speed-up is sublinear, using 4 instead of 1 worker is not 4x faster but rather 2.5-3x. Additionally, in most cases, using more than 4 workers does not provide any further gains.</p>
 
-<h2 id="conclusion">Conclusion</h2>
+<h2 id="hdf5-vs-jpeg">HDF5 vs JPEG</h2>
 
-<p>JPEG is a codec that has been built for natural images and works well for them.</p>
+<p>Pros</p>
 
-<p>Check <a href="https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5">this article</a> for more</p>
+<ul>
+  <li>Whole dataset in one file (important for staging)</li>
+  <li>Various compression schemes</li>
+  <li>Pretty fast if tweaked properly</li>
+  <li>Raw data with “unlimited” range</li>
+</ul>
+
+<p>Cons</p>
+<ul>
+  <li>Suboptimal compression for natural images/video</li>
+  <li>Need to fiddle with chunking</li>
+  <li>Learning curve for API</li>
+</ul>
 
 
   </div><!-- from https://github.com/utterance/utterances -->
