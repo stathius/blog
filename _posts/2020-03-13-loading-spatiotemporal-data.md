@@ -1,7 +1,7 @@
 ---
 toc: false
 layout: post
-title:  Spatiotemporal data for pytorch in HDF5
+title:  Spatiotemporal data for Deep Learning in HDF5
 description: Loading data can become a bottleneck in training deep learning models. Here we provide some speed comparisons for spatiotemporal data storage.
 categories: [pytorch, spatiotemporal, speed, comparison]
 comments: true
